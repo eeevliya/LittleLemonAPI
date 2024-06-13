@@ -74,39 +74,29 @@ class SingleMenuItemView(generics.RetrieveUpdateDestroyAPIView):
         else:
             return Response({"message": "You are not authorized to perform this action."}, status=status.HTTP_403_FORBIDDEN)
         
-        
+    
 #User Group Management
+        
 class ManagerUsersView(APIView):
+    
     permission_classes = [IsAdminOrManager]
     
-    def get_manager_group(self):
-        return Group.objects.get(name='Manager')
-    
-    def get_user(self, pk):
+    def get(self, request, *args):
         try:
-            return User.objects.get(pk=pk)
-        except:
-            raise Http404("User not found")
-
-
-    def get(self, request):
-        try:
-            manager_group = self.get_manager_group()
+            manager_group = Group.objects.get(name='Manager')
             manager_users = manager_group.user_set.all()
             serializer = UserSerializer(manager_users, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except PermissionDenied:
             return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
     
-    def post(self, request):
-        if not request.user.is_staff:
-            raise PermissionDenied()
+    def post(self, request, *args):
 
         pk = request.data.get('user_id')
         if pk:
             try:
-                user = self.get_user(pk)
-                manager_group = self.get_manager_group()
+                user = User.objects.get(pk=pk)
+                manager_group = Group.objects.get(name='Manager')
                 user.groups.add(manager_group)
                 return Response({"message": "User granted manager status."}, status=status.HTTP_201_CREATED)
             except User.DoesNotExist:
@@ -116,19 +106,72 @@ class ManagerUsersView(APIView):
         else:
             return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
     
+
+class ManagerRevokeView(APIView):
+    permission_classes = [IsAdminOrManager]
+    
     def delete(self, request, pk):
         
         if pk:
             try:
-
-                user = self.get_user(pk)
-                manager_group = self.get_manager_group()
+                user = User.objects.get(pk=pk)
+                manager_group = Group.objects.get(name='Manager')
                 
                 if manager_group not in user.groups.all():
                     return Response({"message": "User is not a manager."}, status=status.HTTP_400_BAD_REQUEST)
                 
                 user.groups.remove(manager_group)
                 return Response({"message": "User's manager status revoked."}, status=status.HTTP_200_OK)
+            except User.DoesNotExist:
+                return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            except PermissionDenied:
+                return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
+        else:
+            return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+        
+class DeliveryCrewUsersView(APIView):
+    permission_classes = [IsAdminOrManager]
+    
+    def get(self, request, *args):
+        try:
+            delivery_group = Group.objects.get(name='DeliveryCrew')
+            delivery_crew_users = delivery_group.user_set.all()
+            serializer = UserSerializer(delivery_crew_users, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except PermissionDenied:
+            return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
+
+    def post(self, request, *args):
+
+        pk = request.data.get('user_id')
+        if pk:
+            try:
+                user = User.objects.get(pk=pk)
+                delivery_crew_group = Group.objects.get(name='DeliveryCrew')
+                user.groups.add(delivery_crew_group)
+                return Response({"message": "User granted Delivery Crew status."}, status=status.HTTP_201_CREATED)
+            except User.DoesNotExist:
+                return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            except PermissionDenied:
+                return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
+        else:
+            return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+        
+class DeliveryCrewRevokeView(APIView):
+    permission_classes = [IsAdminOrManager]
+
+    def delete(self, request, pk):
+        
+        if pk:
+            try:
+                user = User.objects.get(pk=pk)
+                delivery_crew_group = Group.objects.get(name='DeliveryCrew')
+                
+                if delivery_crew_group not in user.groups.all():
+                    return Response({"message": "User is not a delivery crew staff."}, status=status.HTTP_400_BAD_REQUEST)
+                
+                user.groups.remove(delivery_crew_group)
+                return Response({"message": "User's delivery crew status revoked."}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
             except PermissionDenied:
