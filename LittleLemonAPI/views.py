@@ -74,9 +74,7 @@ class SingleMenuItemView(generics.RetrieveUpdateDestroyAPIView):
         else:
             return Response({"message": "You are not authorized to perform this action."}, status=status.HTTP_403_FORBIDDEN)
         
-    
 #User Group Management
-        
 class ManagerUsersView(APIView):
     
     permission_classes = [IsAdminOrManager]
@@ -106,7 +104,6 @@ class ManagerUsersView(APIView):
         else:
             return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
     
-
 class ManagerRevokeView(APIView):
     permission_classes = [IsAdminOrManager]
     
@@ -178,3 +175,41 @@ class DeliveryCrewRevokeView(APIView):
                 return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
         else:
             return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+        
+#Cart Management view
+class CartView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            user = request.user
+            cartItems = Cart.objects.filter(user=user)
+            serializer = CartSerializer(cartItems, many = True)
+            return Response(serializer.data, status = status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDenied:
+            return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
+        
+        
+    
+    def post(self, request):
+        serializer = CartSerializer(data=request.data, context={'request': request})
+        
+        if serializer.is_valid():
+            serializer.save()  # This will call CartSerializer's create method
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    
+    def delete(self, request):
+        try:
+            user = request.user
+            cart_items = Cart.objects.filter(user=user)
+            cart_items.delete()
+            return Response({"message": "Cart items deleted successfully."}, status=status. HTTP_204_NO_CONTENT)
+        except User.DoesNotExist:
+            return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDenied:
+            return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)

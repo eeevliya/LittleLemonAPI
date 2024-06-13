@@ -45,12 +45,53 @@ class MenuItemSerializer(serializers.ModelSerializer):
         }
         
 class CartSerializer(serializers.ModelSerializer):
+    menuitem_id = serializers.PrimaryKeyRelatedField(
+        queryset=MenuItem.objects.all(), write_only=True, source='menuitem'
+    )
     menuitem = MenuItemSerializer(read_only=True)
-    #user = serializers.StringRelatedField(read_only=True)
+    quantity = serializers.IntegerField(min_value=1)
+    unit_price = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
+    price = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
 
     class Meta:
         model = Cart
-        fields = ['menuitem', 'quantity', 'unit_price', 'price']
+        fields = ['menuitem', 'menuitem_id', 'quantity', 'unit_price', 'price']
+
+    def validate(self, attrs):
+        menuitem = attrs['menuitem_id']
+        quantity = attrs['quantity']
+
+        # Check if the menu item exists
+        if not MenuItem.objects.filter(id=menuitem.id).exists():
+            raise serializers.ValidationError("Menu item does not exist.")
+
+        if quantity <= 0:
+            raise serializers.ValidationError("Quantity must be a positive integer.")
+
+        return attrs
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        menuitem = validated_data['menuitem']
+        quantity = validated_data['quantity']
+        unit_price = menuitem.price
+        price = unit_price * quantity
+
+        # Check if the item already exists in the cart for this user
+        cart_item, created = Cart.objects.get_or_create(user=user, menuitem=menuitem)
+
+        if not created:
+            # If item already exists, update the quantity
+            cart_item.quantity += quantity
+            cart_item.price += price
+        else:
+            # If new item, set initial values
+            cart_item.quantity = quantity
+            cart_item.unit_price = unit_price
+            cart_item.price = price
+
+        cart_item.save()
+        return cart_item
         
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
