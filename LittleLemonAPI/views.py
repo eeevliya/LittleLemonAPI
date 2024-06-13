@@ -309,7 +309,29 @@ class SingleOrderView(APIView):
             return Response({"message": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
         
         user = request.User
-        if user == order.delivery_crew:
+        if isAdminOrManager(user):
+            #admin or manager can update both the status and the delivery crew
+            deliveryCrewID = request.data.get('delivery_crew')
+            if deliveryCrewID:
+                try:
+                    deliveryCrew = User.objects.get(pk= deliveryCrewID)
+                except User.DoesNotExist:
+                    return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+                if not deliveryCrew.groups.filter('DeliveryCrew').exists():
+                    return Response({"message": "User is not delivery crew."}, status=status.HTTP_400_BAD_REQUEST)
+            
+                order.delivery_crew = deliveryCrew
+                
+            updatedStatus = request.data.get('status')
+            if updatedStatus:
+                order.status = updatedStatus
+                
+            order.save()
+            serializer = OrderSerializer(order)
+            return Response(serializer.data, status = status.HTTP_200_OK)
+        
+        elif user == order.delivery_crew:
             updatedStatus = request.data.get('status')
             if updatedStatus is None:
                 return Response({"message": "Status field is required in the request."},status=status.HTTP_400_BAD_REQUEST)
@@ -317,8 +339,23 @@ class SingleOrderView(APIView):
             order.save()
             serializer = OrderSerializer(order)
             return Response(serializer.data, status = status.HTTP_200_OK)
+        
         else:
             return Response({'message': "You are not authorized to update this order"}, status = status.HTTP_403_FORBIDDEN)
+        
+    def delete(self, request, pk):
+        user = request.user
+        
+        if not isAdminOrManager(user):
+            return Response({'message': "You are not authorized to delete orders"}, status = status.HTTP_403_FORBIDDEN)
+        
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        order.delete()
+        return Response({"message": "Order deleted."}, status=status.HTTP_204_NO_CONTENT)
             
         
         
