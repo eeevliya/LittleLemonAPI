@@ -9,7 +9,7 @@ from .models import MenuItem, Category, Cart, Order, OrderItem
 class CategorySerializer(serializers.ModelSerializer):
     
     def validate(self, attrs):
-        
+        lol = 555
         slugInput = attrs['slug']
         titleInput = attrs['title']
         if(not slugInput or slugInput == ""):
