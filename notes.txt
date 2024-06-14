@@ -1,0 +1,24 @@
+Roles, Usernames and passwords:
+
+Superuser:
+admin
+lemon@123!
+
+Manager:
+karen
+karen@123!
+
+DeliveryCrew:
+mark
+mark@123!
+
+Customers:
+jenny
+jenny@123!
+
+semiramis
+semir@123!
+
+I've made some tests using insomnia so the database is somewhat populated. I've created catagories and 1 menu item for each category. Feel free to edit them as you like.
+
+I've also added a .json file names LittleLemonAPITests.json. This is an insomnia export. You can import this collection to insomnia to view the tests I've performed. After creating a superuser from the shell, and creating categories from the admin panel, I've used these API tests to do everything.

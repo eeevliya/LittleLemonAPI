@@ -17,6 +17,7 @@ class CategorySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Title field cannot be empty')
         titleInput = bleach.clean(titleInput)
         slugInput = slugify(bleach.clean(slugInput))
+        return attrs
     
     class Meta:
         model = Category
@@ -25,7 +26,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class MenuItemSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only = True)
     category_id = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), write_only=True
+        queryset=Category.objects.all(), write_only=True, source = 'category'
     )
     
     def validate_title(self,value):
@@ -36,18 +37,19 @@ class MenuItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
         fields = ['id','title', 'price', 'featured', 'price', 'category', 'category_id' ]
+        read_only_fields = ['id', 'category']
         extra_kwargs = {
-            'price': {'min_value' : 0},
+            'price': {'min_value' : 0.0},
             'validators': [
                 UniqueValidator(queryset = MenuItem.objects.all()),
             ]
         }
         
 class CartSerializer(serializers.ModelSerializer):
+    menuitem = MenuItemSerializer(read_only=True)
     menuitem_id = serializers.PrimaryKeyRelatedField(
         queryset=MenuItem.objects.all(), write_only=True, source='menuitem'
     )
-    menuitem = MenuItemSerializer(read_only=True)
     quantity = serializers.IntegerField(min_value=1)
     unit_price = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
     price = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
@@ -55,19 +57,6 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = ['menuitem', 'menuitem_id', 'quantity', 'unit_price', 'price']
-
-    def validate(self, attrs):
-        menuitem = attrs['menuitem_id']
-        quantity = attrs['quantity']
-
-        # Check if the menu item exists
-        if not MenuItem.objects.filter(id=menuitem.id).exists():
-            raise serializers.ValidationError("Menu item does not exist.")
-
-        if quantity <= 0:
-            raise serializers.ValidationError("Quantity must be a positive integer.")
-
-        return attrs
 
     def create(self, validated_data):
         user = self.context['request'].user
@@ -77,7 +66,7 @@ class CartSerializer(serializers.ModelSerializer):
         price = unit_price * quantity
 
         # Check if the item already exists in the cart for this user
-        cart_item, created = Cart.objects.get_or_create(user=user, menuitem=menuitem)
+        cart_item, created = Cart.objects.get_or_create(user=user, menuitem=menuitem, unit_price = unit_price, price = price, quantity=quantity)
 
         if not created:
             # If item already exists, update the quantity

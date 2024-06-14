@@ -28,6 +28,17 @@ def apply_query_param(items, request,param: str, field_name: str, lookup_expr: s
         items = items.filter(**filter_kwargs)
     return items
     
+#Category Views
+class CategoryView(generics.ListCreateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    
+    def get_permissions(self):
+        self.permission_classes = [IsAdminOrManager]
+        if self.request.method == "GET":
+            self.permission_classes = []
+        return super(CategoryView, self).get_permissions()
+
 #Menu item views
 class MenuItemsView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -39,8 +50,14 @@ class MenuItemsView(APIView):
         items = apply_query_param(items, request,"to_price", "price", "lte")
         items = apply_query_param(items, request,"from_price",  "price", "gte")
         items = apply_query_param(items, request, "search", "title", "icontains" )
+        items = apply_query_param(items, request, "featured", "featured")
         
-        per_page = request.query_params.get('perpage', default = 5)
+        orderby = request.query_params.get('orderby')
+        if orderby:
+            orderingFields = orderby.split(",")
+            items = items.order_by(*orderingFields)
+        
+        per_page = request.query_params.get('perpage', default = 10)
         paginator = Paginator(items, per_page = per_page)
         page = request.query_params.get('page', default = 1)
         try:
@@ -59,10 +76,18 @@ class MenuItemsView(APIView):
     def post(self, request):
         
         if isAdminOrManager(request.user):
-            serializedItem = MenuItemSerializer(data = request.data)
-            serializedItem.is_valid(raise_exception=True)
-            serializedItem.save()
-            return Response(serializedItem.data, status = status.HTTP_201_CREATED)
+            is_many = isinstance(request.data, list)
+            serialized_items = MenuItemSerializer(data=request.data, many=is_many)
+            
+            if serialized_items.is_valid():
+                if is_many:
+                    MenuItem.objects.bulk_create([MenuItem(**item) for item in serialized_items.validated_data])
+                else:
+                    MenuItem.objects.create(**serialized_items.validated_data)
+                
+                return Response(serialized_items.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response({'message': "Request payload is not valid"}, status = status.HTTP_400_BAD_REQUEST)
         else:
             return Response({"message": "You are not authorized to perform this action."}, status=status.HTTP_403_FORBIDDEN)
         
@@ -89,7 +114,7 @@ class SingleMenuItemView(generics.RetrieveUpdateDestroyAPIView):
             return Response({"message": "You are not authorized to perform this action."}, status=status.HTTP_403_FORBIDDEN)
         
     def patch(self, request, pk):
-        if request.user.groups.filter(name='Manager').exists():
+        if isAdminOrManager(request.user):
             menu_item = MenuItem.objects.get(pk=pk)
             if not menu_item:
                 return Response({"message": "Menu item not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -129,12 +154,12 @@ class ManagerUsersView(APIView):
         except PermissionDenied:
             return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
     
-    def post(self, request, *args):
+    def post(self, request):
 
-        pk = request.data.get('user_id')
-        if pk:
+        username = request.data.get('username')
+        if not username is None:
             try:
-                user = User.objects.get(pk=pk)
+                user = User.objects.get(username=username)
                 manager_group = Group.objects.get(name='Manager')
                 user.groups.add(manager_group)
                 return Response({"message": "User granted manager status."}, status=status.HTTP_201_CREATED)
@@ -143,17 +168,17 @@ class ManagerUsersView(APIView):
             except PermissionDenied:
                 return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
         else:
-            return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "Please provide a username in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
     
 class ManagerRevokeView(APIView):
     permission_classes = [IsAdminOrManager]
     throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
-    def delete(self, request, pk):
+    def delete(self, request, username):
         
-        if pk:
+        if not username is None:
             try:
-                user = User.objects.get(pk=pk)
+                user = User.objects.get(username=username)
                 manager_group = Group.objects.get(name='Manager')
                 
                 if manager_group not in user.groups.all():
@@ -166,7 +191,7 @@ class ManagerRevokeView(APIView):
             except PermissionDenied:
                 return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
         else:
-            return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "Please provide a username in the parameters."}, status=status.HTTP_400_BAD_REQUEST)
         
 class DeliveryCrewUsersView(APIView):
     permission_classes = [IsAdminOrManager]
@@ -183,10 +208,10 @@ class DeliveryCrewUsersView(APIView):
 
     def post(self, request, *args):
 
-        pk = request.data.get('user_id')
-        if pk:
+        username = request.data.get('username')
+        if not username is None:
             try:
-                user = User.objects.get(pk=pk)
+                user = User.objects.get(username=username)
                 delivery_crew_group = Group.objects.get(name='DeliveryCrew')
                 user.groups.add(delivery_crew_group)
                 return Response({"message": "User granted Delivery Crew status."}, status=status.HTTP_201_CREATED)
@@ -195,17 +220,17 @@ class DeliveryCrewUsersView(APIView):
             except PermissionDenied:
                 return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
         else:
-            return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "Please provide a username in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
         
 class DeliveryCrewRevokeView(APIView):
     permission_classes = [IsAdminOrManager]
     throttle_classes = [AnonRateThrottle, UserRateThrottle]
 
-    def delete(self, request, pk):
+    def delete(self, request, username):
         
-        if pk:
+        if not username is None:
             try:
-                user = User.objects.get(pk=pk)
+                user = User.objects.get(username=username)
                 delivery_crew_group = Group.objects.get(name='DeliveryCrew')
                 
                 if delivery_crew_group not in user.groups.all():
@@ -218,7 +243,7 @@ class DeliveryCrewRevokeView(APIView):
             except PermissionDenied:
                 return Response({"message": "You do not have permission to access this resource."}, status=status.HTTP_403_FORBIDDEN)
         else:
-            return Response({"message": "Please provide a user_id in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "Please provide a username in the parameters."}, status=status.HTTP_400_BAD_REQUEST)
         
 #Cart Management view
 class CartView(APIView):
@@ -360,23 +385,24 @@ class SingleOrderView(APIView):
         except Order.DoesNotExist:
             return Response({"message": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
         
-        user = request.User
+        user = request.user
         if isAdminOrManager(user):
             #admin or manager can update both the status and the delivery crew
-            deliveryCrewID = request.data.get('delivery_crew')
-            if deliveryCrewID:
+            deliveryCrewID = int(request.data.get('delivery_crew'))
+            if not deliveryCrewID is None:
                 try:
                     deliveryCrew = User.objects.get(pk= deliveryCrewID)
+                    name = deliveryCrew.username
                 except User.DoesNotExist:
                     return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-                if not deliveryCrew.groups.filter('DeliveryCrew').exists():
+                if not deliveryCrew.groups.filter(name = 'DeliveryCrew').exists():
                     return Response({"message": "User is not delivery crew."}, status=status.HTTP_400_BAD_REQUEST)
             
                 order.delivery_crew = deliveryCrew
                 
             updatedStatus = request.data.get('status')
-            if updatedStatus:
+            if not updatedStatus is None:
                 order.status = updatedStatus
                 
             order.save()
