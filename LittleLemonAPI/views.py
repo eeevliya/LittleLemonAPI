@@ -8,6 +8,7 @@ from rest_framework.decorators import permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
 from .models import MenuItem, Category,Cart, Order, OrderItem
 from .seralizers import CartSerializer, CategorySerializer, MenuItemSerializer, UserSerializer, OrderSerializer
 from .permissions import IsAdminOrManager
@@ -30,6 +31,7 @@ def apply_query_param(items, request,param: str, field_name: str, lookup_expr: s
 #Menu item views
 class MenuItemsView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def get(self, request):
         items = MenuItem.objects.select_related('category').all()
@@ -68,6 +70,7 @@ class SingleMenuItemView(generics.RetrieveUpdateDestroyAPIView):
     queryset= MenuItem.objects.select_related('category').all()
     serializer_class = MenuItemSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def put(self, request, pk):
         if request.user.groups.filter(name = 'Manager').exists():
@@ -115,6 +118,7 @@ class SingleMenuItemView(generics.RetrieveUpdateDestroyAPIView):
 class ManagerUsersView(APIView):
     
     permission_classes = [IsAdminOrManager]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def get(self, request, *args):
         try:
@@ -143,6 +147,7 @@ class ManagerUsersView(APIView):
     
 class ManagerRevokeView(APIView):
     permission_classes = [IsAdminOrManager]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def delete(self, request, pk):
         
@@ -165,6 +170,7 @@ class ManagerRevokeView(APIView):
         
 class DeliveryCrewUsersView(APIView):
     permission_classes = [IsAdminOrManager]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def get(self, request, *args):
         try:
@@ -193,6 +199,7 @@ class DeliveryCrewUsersView(APIView):
         
 class DeliveryCrewRevokeView(APIView):
     permission_classes = [IsAdminOrManager]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
 
     def delete(self, request, pk):
         
@@ -216,6 +223,7 @@ class DeliveryCrewRevokeView(APIView):
 #Cart Management view
 class CartView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def get(self, request):
         try:
@@ -254,6 +262,7 @@ class CartView(APIView):
 #Order Management
 class OrderView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
       
     def get(self, request):
         try:
@@ -330,6 +339,7 @@ class OrderView(APIView):
             
 class SingleOrderView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     
     def get(self, request, pk):
         try:
