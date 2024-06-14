@@ -1,5 +1,6 @@
 from datetime import date
 from django.contrib.auth.models import User, Group
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.http import Http404
 from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
@@ -15,11 +16,43 @@ def isAdminOrManager(user: User) -> bool:
     is_admin_or_manager = user.is_superuser or user.groups.filter(name='Manager').exists()
     return is_admin_or_manager
 
+def apply_query_param(items, request,param: str, field_name: str, lookup_expr: str = 'exact'):
+    value = request.query_params.get(param)
+    if value is not None:
+        if lookup_expr == 'exact':
+            filter_kwargs = {f"{field_name}": value}
+        else:
+            filter_kwargs = {f"{field_name}__{lookup_expr}": value}
+
+        items = items.filter(**filter_kwargs)
+    return items
+    
 #Menu item views
-class MenuItemsView(generics.ListCreateAPIView):
-    queryset = MenuItem.objects.select_related('category').all()
-    serializer_class = MenuItemSerializer
+class MenuItemsView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get(self, request):
+        items = MenuItem.objects.select_related('category').all()
+        items = apply_query_param(items, request,"category", "category", "pk")
+        items = apply_query_param(items, request,"to_price", "price", "lte")
+        items = apply_query_param(items, request,"from_price",  "price", "gte")
+        items = apply_query_param(items, request, "search", "title", "icontains" )
+        
+        per_page = request.query_params.get('perpage', default = 5)
+        paginator = Paginator(items, per_page = per_page)
+        page = request.query_params.get('page', default = 1)
+        try:
+            items = paginator.page(page)
+        except PageNotAnInteger:
+            items = paginator.page(1)
+        except EmptyPage:
+            items = paginator.page(paginator.num_pages)
+        except:
+            items =[]
+            
+        serializer = MenuItemSerializer(items, many=True)
+        return Response(serializer.data, status = status.HTTP_200_OK)
+           
     
     def post(self, request):
         
@@ -221,31 +254,40 @@ class CartView(APIView):
 #Order Management
 class OrderView(APIView):
     permission_classes = [IsAuthenticated]
-    
-    def get_for_manager(self):
-        orders = Order.objects.all()
-        serializer = OrderSerializer(orders, many = True)
-        return Response(serializer.data, status = status.HTTP_200_OK)
-    
-    def get_for_delivery_crew(self,user):
-        orders = Order.objects.filter(delivery_crew = user)
-        serializer = OrderSerializer(orders, many = True)
-        return Response(serializer.data, status = status.HTTP_200_OK)
-    
-    def get_for_customer(self, user):
-        orders = Order.objects.filter(user=user)
-        serializer = OrderSerializer(orders, many=True)
-        return Response(serializer.data, status = status.HTTP_200_OK)
-    
+      
     def get(self, request):
         try:
             user = request.user
             if isAdminOrManager(user):
-               return self.get_for_manager()
+               orders =  Order.objects.all()
             elif user.groups.filter(name = 'DeliveryCrew').exists():
-                return self.get_for_delivery_crew(user)
+               orders = Order.objects.filter(delivery_crew = user)
             else:
-                return self.get_for_customer(user)
+               orders = orders = Order.objects.filter(user=user)
+               
+            orders = apply_query_param(orders, request, "userID", "user", "pk")
+            orders = apply_query_param(orders, request, "delivery-crew", "delivery-crew", "pk")
+            orders = apply_query_param(orders, request, "status", "status")
+            orders = apply_query_param(orders, request, "to_total", "total", "lte")
+            orders = apply_query_param(orders, request, "from_total", "total", "gte")
+            orders = apply_query_param(orders, request, "start_date", "date", "gte")
+            orders = apply_query_param(orders, request, "end_date", "date", "lte")
+            
+            per_page = request.query_params.get('perpage', default = 5)
+            paginator = Paginator(orders, per_page = per_page)
+            page = request.query_params.get('page', default = 1)
+            
+            try:
+                orders = paginator.page(page)
+            except PageNotAnInteger:
+                orders = paginator.page(1)
+            except EmptyPage:
+                orders = paginator.page(paginator.num_pages)
+            except:
+                orders =[]
+            
+            serializer = OrderSerializer(orders, many = True)
+            return Response(serializer.data, status = status.HTTP_200_OK)
         
         except User.DoesNotExist:
             return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
