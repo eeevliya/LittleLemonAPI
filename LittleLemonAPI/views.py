@@ -52,7 +52,7 @@ class MenuItemsView(APIView):
         items = apply_query_param(items, request, "search", "title", "icontains" )
         items = apply_query_param(items, request, "featured", "featured")
         
-        orderby = request.query_params.get('orderby')
+        orderby = request.query_params.get('ordering')
         if orderby:
             orderingFields = orderby.split(",")
             items = items.order_by(*orderingFields)
