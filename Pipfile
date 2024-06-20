@@ -9,6 +9,7 @@ django-rest-framework = "*"
 djoser = "*"
 bleach = "*"
 django-debug-toolbar = "*"
+mysqlclient = "*"
 
 [dev-packages]
 
